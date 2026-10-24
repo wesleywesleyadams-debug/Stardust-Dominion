@@ -109,11 +109,10 @@ static func call_scene(id: String, img: Image) -> void:
 			_line(img, Vector2(24, 38), Vector2(58, 18), 1.0, Color("9fffb0"))
 			_sprite(img, "ship_corvette", Vector2(54, 14), 12.0)
 		"mod_missile_barrage":
-			_sprite(img, "ship_carrier", Vector2(14, 48), 22.0)
-			for k in 7:
-				var q := Vector2(26 + k * 4, 36 - k * 4)
-				_line(img, q, q + Vector2(5, -2), 1.5, Color("ff6a4a"))
-				_disc(img, q, 1.0, Color("ffd84a"))
+			# S2: the front half of our carrier in the lower-left corner; two of its front
+			# turrets each send a burst of bright darts curving onto an enemy cruiser,
+			# the lead darts already bursting on it.
+			_barrage_scene(img)
 		# ---------------------------------------------------------- constructs
 		"garrison_guns":
 			_sprite(img, "starbase", C + Vector2(-4, 4), 34.0)
@@ -2127,3 +2126,73 @@ static func _drone_ring(img: Image, cc: Vector2, rx: float, ry: float, front: bo
 ## A drone at angle a on the orbit, facing along it.
 static func _orbit_drone(img: Image, cc: Vector2, rx: float, ry: float, a: float, s: float, dim: float) -> void:
 	_drone_dart(img, cc + Vector2(cos(a) * rx, sin(a) * ry), Vector2(-sin(a) * rx, cos(a) * ry).angle(), s, dim)
+
+## Our carrier (45 degrees) with turret sprites on its four real mounts; returns the four muzzle points.
+static func _carrier_mounts(img: Image, cc: Vector2, box: float, lit: Vector2) -> Array:
+	var ang := -PI / 4.0
+	var warm := Color("ffc890")
+	_spr_rim(img, "ship_carrier", cc, box, ang, lit, box * 0.9, warm, 1.0, 0.0, false)
+	var k := box / 238.0
+	var fr := [Vector2(0.242, -0.208), Vector2(0.242, 0.199), Vector2(0.52, -0.303), Vector2(0.52, 0.294)]
+	var out := []
+	for i in 4:
+		var c: Vector2 = cc + Vector2((fr[i].x - 0.5) * 238.0, fr[i].y * 122.0).rotated(ang) * k
+		_spr_rim(img, "ship_turret", c, 22.0 * k * 0.82 * 2.2, ang, lit, 40.0, warm, 1.0, 0.0, false)
+		out.append(c + Vector2.from_angle(ang) * 22.0 * k * 0.82 * 1.1)
+	return out
+
+## One barrage missile heading d: a bright yellow-white head with a pale core and a short orange tail.
+static func _bar_dart(img: Image, p: Vector2, d: Vector2, head: float, dim: float) -> void:
+	var n := d.orthogonal()
+	var w := head * 0.46
+	var a0 := p - d * head * 0.4
+	_poly(img, [a0 + n * w * 0.42, a0 - d * head * 1.0, a0 - n * w * 0.42], Color(1.0, 0.55, 0.12, 0.85 * dim))
+	_poly(img, [a0 + n * w * 0.22, a0 - d * head * 0.65, a0 - n * w * 0.22], Color(1.0, 0.78, 0.3, 0.95 * dim))
+	var o := []
+	var c := []
+	for k in 18:
+		var a := TAU * k / 18.0
+		o.append(p + d * cos(a) * head * 0.52 + n * sin(a) * w * 0.52)
+		c.append(p + d * cos(a) * head * 0.4 + n * sin(a) * w * 0.34 + d * head * 0.04)
+	_poly(img, o, Color(1.0, 0.86, 0.28) * dim)
+	_poly(img, c, Color(1.0, 0.99, 0.82) * dim)
+
+## Missile Barrage: two strings of four darts from the carrier's front turrets onto one cruiser.
+static func _barrage_scene(img: Image) -> void:
+	var cc := Vector2(14, 50)
+	var ang := -PI / 4.0
+	var ms := _carrier_mounts(img, cc, 40.0, cc + Vector2(14, -10))
+	var lat := Vector2.from_angle(ang).orthogonal()
+	var front := [ms[2], ms[3]]
+	front.sort_custom(func(a, b): return (a - cc).dot(lat) < (b - cc).dot(lat))
+	var te := Vector2(50, 16)
+	var tb := 22.0
+	var face := roundf((cc - te).angle() / (PI / 4.0)) * (PI / 4.0)
+	var hp := te + (cc - te).normalized() * tb * 0.45
+	_spr_rim(img, "ship_cruiser", te, tb, face, hp, tb, Color("ffd8b0"), 0.95, 0.0, false)
+	var offs := [-6.0, 6.0]
+	var bends := [-4.0, 4.0]
+	for si in 2:
+		var start: Vector2 = front[si]
+		var e: Vector2 = hp + (te - cc).normalized().orthogonal() * float(offs[si])
+		var ctl: Vector2 = (start + e) * 0.5 + (e - start).normalized().orthogonal() * float(bends[si])
+		_soft_glow(img, start + Vector2.from_angle(ang) * 2.0, 2.6, Color("ff9a2a"), Color("fff0b0"))
+		var pts := []
+		var cum := [0.0]
+		for k in 80:
+			pts.append(_quad(start, ctl, e, float(k) / 79.0))
+			if k > 0:
+				cum.append(cum[k - 1] + pts[k].distance_to(pts[k - 1]))
+		var total: float = cum[79]
+		for k in 4:
+			var sd := 8.0 + k * 10.0
+			if sd > total * 0.97:
+				continue
+			var idx := 0
+			while idx < 78 and cum[idx + 1] < sd:
+				idx += 1
+			var d: Vector2 = (pts[mini(idx + 1, 79)] - pts[maxi(idx - 1, 0)]).normalized()
+			var u: float = sd / total
+			_bar_dart(img, pts[idx], d, lerpf(5.0, 3.8, u), lerpf(1.0, 0.75, u))
+		if si == 0:
+			_cb_blast(img, hp + (e - hp) * 0.2, 5.2, 900)
