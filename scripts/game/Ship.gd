@@ -693,6 +693,10 @@ var _speed_cache: float = 0.0
 ## Game._issue_command); 0 = no cap. Dropped once the ship is doing anything
 ## but travelling, and ignored while it is engaging a target.
 var group_speed: float = 0.0
+## The ships ordered along with this one (itself included), for keeping pace.
+var move_group: Array = []
+## Extra speed per unit a ship trails the group's average distance to go.
+const GROUP_CATCHUP := 0.6
 ## Maneuvers (see _steer): ships thrust nose-first. Strafing Thrusters add
 ## sideways thrust, Reverse Thrusters backward thrust, each up to this share
 ## of full speed; parked ships keep station with a little thrust on every axis.
@@ -1119,7 +1123,19 @@ func _capped(v: float) -> float:
 		return v
 	if state == State.ATTACK_MOVE and is_instance_valid(target):
 		return v
-	return minf(v, group_speed)
+	# Keeping pace: a ship further from its spot than the group's average
+	# speeds up (never past its own top speed), one ahead of the pack eases
+	# off, so a scattered group closes up as it goes.
+	var mates := 0
+	var total := 0.0
+	for m in move_group:
+		if is_instance_valid(m) and m.is_alive() and m.group_speed > 0.0:
+			total += m.global_position.distance_to(m.move_goal)
+			mates += 1
+	if mates < 2:
+		return minf(v, group_speed)
+	var lag: float = global_position.distance_to(move_goal) - total / mates
+	return clampf(group_speed + lag * GROUP_CATCHUP, group_speed * 0.25, v)
 
 ## Unmodified top speed (no Evasive burst / recovery).
 func base_speed() -> float:

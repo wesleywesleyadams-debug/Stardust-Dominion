@@ -2807,6 +2807,7 @@ func _issue_command(world_pos: Vector2, attack_move: bool, queued: bool = false)
 		slowest = minf(slowest, s.base_speed())
 	for s in ships:
 		s.group_speed = slowest if ships.size() > 1 else 0.0
+		s.move_group = ships.duplicate() if ships.size() > 1 else []
 	hud.ping(world_pos, Color("ff5a5a") if attack_move else Color.WHITE)
 
 ## Grid formation facing the direction of travel, biggest hulls in front.
