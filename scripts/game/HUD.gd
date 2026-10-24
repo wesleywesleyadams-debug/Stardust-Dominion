@@ -1216,7 +1216,7 @@ func _rebuild_selection() -> void:
 ## runs out of room.
 const FLEET_TILES_MAX := 24
 ## The box one of those tiles occupies, sprite and bars together.
-const FLEET_TILE := Vector2(46, 44)
+const FLEET_TILE := Vector2(50, 58)
 
 ## One selected ship: its sprite with a shield/armor/hull bar under it, so a
 ## glance at the panel says which ships in the fleet are hurt. Live: the HUD
@@ -1239,7 +1239,7 @@ class ScoreBracket extends Control:
 
 class FleetTile extends Control:
 	var host: SpaceEntity
-	const BAR_H := 3.0
+	const BAR_H := 5.0
 	const GAP := 1.0
 	const BARS_H := 3.0 * (BAR_H + GAP)
 
@@ -1299,7 +1299,12 @@ func _add_fleet_tiles(sel: Array) -> void:
 		var art_name := _ship_art((e as Ship).ship_type) if e is Ship else "starbase"
 		var tex := Defs.tex(art_name)
 		var wide: bool = tex != null and tex.get_width() * 2.0 / Defs.art_div(art_name) > FLEET_TILE.x - 4.0
-		hold.add_child(_icon(art_name, 1 if wide else 2))
+		var ic := _icon(art_name, 1 if wide else 2)
+		# Still too big (a starbase): shrink to fit the tile above its bars.
+		var room := Vector2(FLEET_TILE.x - 4.0, FLEET_TILE.y - FleetTile.BARS_H - 4.0)
+		var fit: float = minf(1.0, minf(room.x / maxf(ic.custom_minimum_size.x, 1.0), room.y / maxf(ic.custom_minimum_size.y, 1.0)))
+		ic.custom_minimum_size *= fit
+		hold.add_child(ic)
 		tile.add_child(hold)
 		row.add_child(tile)
 		_fleet_tiles.append(tile)
