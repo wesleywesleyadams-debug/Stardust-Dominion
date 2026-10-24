@@ -2646,6 +2646,27 @@ func selected_starbase() -> Starbase:
 			return e
 	return null
 
+## Every finished own starbase in the selection.
+func selected_starbases() -> Array:
+	return selection.filter(func(e): return is_instance_valid(e) and e is Starbase and e.owner_id == player_id and not e.under_construction)
+
+## Of `bases`, the one that can queue `ship_type` and would finish it soonest
+## (least build time left in its queue; shorter queue breaks ties). None can:
+## the first, so request_build gives its refusal.
+func best_starbase_for(bases: Array, ship_type: String) -> Starbase:
+	var best: Starbase = null
+	var best_left := INF
+	for sb in bases:
+		if not is_instance_valid(sb) or sb.can_queue(ship_type) != "":
+			continue
+		var left: float = -sb.build_progress + sb.queue.size() * 0.001
+		for t in sb.queue:
+			left += Defs.SHIPS[t]["build_time"]
+		if left < best_left:
+			best_left = left
+			best = sb
+	return best if best else (bases[0] if not bases.is_empty() else null)
+
 func _centroid(list: Array) -> Vector2:
 	var c := Vector2.ZERO
 	for e in list:
@@ -2680,7 +2701,8 @@ func _issue_command(world_pos: Vector2, attack_move: bool, queued: bool = false)
 						kind = "attack"
 					elif rp.owner_id == 0 and rp.is_habitable():
 						kind = "colonize"
-			sb.set_rally(obj.global_position if obj else world_pos, obj)
+			for b in selected_starbases():
+				b.set_rally(obj.global_position if obj else world_pos, obj)
 			if obj:
 				hud.flash_target(obj, kind)
 			else:
@@ -4314,6 +4336,7 @@ func cycle_starbase() -> void:
 		_starbase_cycle = (at + 1) % mine.size()
 	else:
 		_starbase_cycle = 0
+	_set_selection([mine[_starbase_cycle]], false)
 	center_on(mine[_starbase_cycle].global_position)
 	sfx.play_ui("click")
 

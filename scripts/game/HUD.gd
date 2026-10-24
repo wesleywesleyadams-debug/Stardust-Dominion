@@ -132,6 +132,7 @@ func _ready() -> void:
 	_build_speed(root)
 	_build_menu_button(root)
 	_build_selection_panel(root)
+	_build_outliner(root)
 	_build_minimap(root)
 	_build_messages(root)
 	_build_help(root)
@@ -1144,6 +1145,7 @@ func _rebuild_selection() -> void:
 		c.free()
 	_queue_row.visible = false
 	_info_label = null
+	_refresh_outliner()
 	var sel: Array = game.selection.filter(func(e): return is_instance_valid(e))
 	if sel.is_empty() and is_instance_valid(game.focused_asteroid):
 		_build_asteroid_panel(game.focused_asteroid)
@@ -1171,7 +1173,7 @@ func _rebuild_selection() -> void:
 		_sel_body.add_child(head)
 		if e.owner_id == game.player_id:
 			if e is Starbase and not e.under_construction:
-				_build_starbase_controls(e)
+				_build_starbase_controls([e])
 			elif e is Ship:
 				_build_ship_controls(e)
 			elif e is WeaponsDepot:
@@ -1180,6 +1182,12 @@ func _rebuild_selection() -> void:
 				_build_gate_panel(e)
 			elif e is FrontierOutpost:
 				_build_outpost_panel(e)
+		return
+	# Only your finished starbases: one build panel for all of them.
+	if sel.all(func(e): return e is Starbase and e.owner_id == game.player_id and not e.under_construction):
+		_sel_body.add_child(_label("%d starbases" % sel.size(), TEXT, 20))
+		_add_fleet_tiles(sel)
+		_build_starbase_controls(sel)
 		return
 	var counts := {}
 	for e in sel:
@@ -1260,7 +1268,7 @@ class FleetTile extends Control:
 ## condition of the fleet and not just its composition.
 func _add_fleet_tiles(sel: Array) -> void:
 	_fleet_tiles.clear()
-	var ships: Array = sel.filter(func(e): return e is Ship and e.owner_id == game.player_id)
+	var ships: Array = sel.filter(func(e): return (e is Ship or e is Starbase) and e.owner_id == game.player_id)
 	if ships.size() < 2:
 		return
 	# Worst first: the ships that need the player's attention lead.
@@ -1280,7 +1288,7 @@ func _add_fleet_tiles(sel: Array) -> void:
 		# the same length and can be compared down the row at a glance.
 		tile.custom_minimum_size = FLEET_TILE
 		tile.clip_contents = true
-		tile.tooltip_text = (e as Ship).def["name"]
+		tile.tooltip_text = e.display_name
 		var hold := CenterContainer.new()
 		hold.set_anchors_preset(Control.PRESET_FULL_RECT)
 		hold.offset_bottom = -FleetTile.BARS_H - 1.0
@@ -1288,7 +1296,7 @@ func _add_fleet_tiles(sel: Array) -> void:
 		# A big hull (an X-class cruiser, a carrier) is drawn at half scale so
 		# it fits the same tile as a corvette instead of spilling over its
 		# neighbours.
-		var art_name := _ship_art((e as Ship).ship_type)
+		var art_name := _ship_art((e as Ship).ship_type) if e is Ship else "starbase"
 		var tex := Defs.tex(art_name)
 		var wide: bool = tex != null and tex.get_width() * 2.0 / Defs.art_div(art_name) > FLEET_TILE.x - 4.0
 		hold.add_child(_icon(art_name, 1 if wide else 2))
@@ -1299,7 +1307,7 @@ func _add_fleet_tiles(sel: Array) -> void:
 	if ships.size() > FLEET_TILES_MAX:
 		_sel_body.add_child(_label("+%d more" % (ships.size() - FLEET_TILES_MAX), DIM, 13))
 
-func _on_fleet_tile_input(ev: InputEvent, ship: Ship) -> void:
+func _on_fleet_tile_input(ev: InputEvent, ship: SpaceEntity) -> void:
 	if not (ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed):
 		return
 	get_viewport().set_input_as_handled()
@@ -1310,10 +1318,25 @@ func _on_fleet_tile_input(ev: InputEvent, ship: Ship) -> void:
 	if ev.ctrl_pressed:
 		pick = sel.filter(func(x): return x != ship)
 	elif ev.shift_pressed:
-		pick = sel.filter(func(x): return x is Ship and x.ship_type == ship.ship_type)
+		pick = sel.filter(func(x): return _kind_of(x) == _kind_of(ship))
 	else:
 		pick = [ship]
 	game._set_selection(pick, false)
+
+## What an outliner/tile entry groups by: a ship's class, else the construct
+## kind (one per depot variant).
+func _kind_of(e: SpaceEntity) -> String:
+	if e is Ship:
+		return (e as Ship).ship_type
+	if e is Starbase:
+		return "starbase"
+	if e is MiningStation:
+		return "mining_station"
+	if e is WeaponsDepot:
+		return "depot_" + (e as WeaponsDepot).variant
+	if e is FortConstruct:
+		return (e as FortConstruct).sprite_name().trim_prefix("ship_")
+	return e.display_name
 
 ## A ship's condition as one number (0-1), worst layer first: hull decides,
 ## with armor and shields breaking ties.
@@ -1324,6 +1347,17 @@ func _condition(e: SpaceEntity) -> float:
 	return hull * 100.0 + armor * 10.0 + shield
 
 func _entity_icon(e: SpaceEntity, px: int) -> Control:
+	var tex_name := _entity_art(e)
+	var stack := Control.new()
+	var base := _icon(tex_name, px)
+	var team := _icon(tex_name + "_team", px)
+	team.modulate = Defs.team_color(e.owner_id)
+	stack.custom_minimum_size = base.custom_minimum_size
+	stack.add_child(base)
+	stack.add_child(team)
+	return stack
+
+func _entity_art(e: SpaceEntity) -> String:
 	var tex_name := "starbase"
 	if e is WeaponsDepot:
 		tex_name = "ship_depot_" + (e as WeaponsDepot).variant
@@ -1333,14 +1367,7 @@ func _entity_icon(e: SpaceEntity, px: int) -> Control:
 		tex_name = (e as FortConstruct).sprite_name()
 	elif e is Ship:
 		tex_name = "ship_" + (e as Ship).def.get("base", (e as Ship).ship_type)
-	var stack := Control.new()
-	var base := _icon(tex_name, px)
-	var team := _icon(tex_name + "_team", px)
-	team.modulate = Defs.team_color(e.owner_id)
-	stack.custom_minimum_size = base.custom_minimum_size
-	stack.add_child(base)
-	stack.add_child(team)
-	return stack
+	return tex_name
 
 func _build_ship_controls(s: Ship) -> void:
 	_add_job_panel(s)
@@ -1402,7 +1429,9 @@ func _button_grid() -> GridContainer:
 ## time, and the warships behind a button (see _build_starbase_controls).
 var _sb_page := "war" if OS.get_environment("SL_SB_PAGE") == "war" else "eco"
 
-func _build_starbase_controls(sb: Starbase) -> void:
+## `bases`: every selected starbase. A build goes to whichever of them will
+## finish it soonest (Game.best_starbase_for).
+func _build_starbase_controls(bases: Array) -> void:
 	var war: Array = Defs.BUILD_ORDER.filter(func(t): return Defs.SHIPS[t]["role"] == "warship")
 	var eco: Array = Defs.BUILD_ORDER.filter(func(t): return Defs.SHIPS[t]["role"] != "warship")
 	# 3x3 at most: eight hulls and the page switch.
@@ -1435,7 +1464,10 @@ func _build_starbase_controls(sb: Starbase) -> void:
 		v.add_child(CostRow.make(d["cost"], 12, -1.0, 1))
 		h.add_child(v)
 		b.add_child(h)
-		b.pressed.connect(func(): game.request_build(sb, t))
+		b.pressed.connect(func():
+			var live: Array = bases.filter(func(x): return is_instance_valid(x) and x.is_alive())
+			if not live.is_empty():
+				game.request_build(game.best_starbase_for(live, t), t))
 		_register_action(b)
 		grid.add_child(b)
 		_build_buttons[t] = b
@@ -1560,6 +1592,8 @@ func _update_selection_info() -> void:
 		if is_instance_valid(t):
 			t.queue_redraw()
 	if _info_label == null:
+		if _queue_row.visible:
+			_update_build_queue(game.selected_starbases())
 		return
 	var sel: Array = game.selection.filter(func(e): return is_instance_valid(e))
 	if sel.is_empty() and is_instance_valid(game.focused_asteroid):
@@ -1640,15 +1674,40 @@ Starbases %d · upkeep %.2f/min each (empire x%.2f)" % [game.starbase_count(sb.o
 			txt += "\nConstruction %d%%%s" % [int(100.0 * f.construct_progress / f.def()["build_time"]), "  STALLED: insufficient funds" if f.build_stalled else ""]
 	_info_label.text = txt
 	if e is Starbase and _queue_row.visible:
-		var sb := e as Starbase
-		for t in _build_buttons:
-			var why := sb.can_queue(t)
-			_build_buttons[t].disabled = why != ""
-			if why.begins_with("Requires"):
-				_build_buttons[t].tooltip_text = why
-		if _queue_row.get_child_count() != sb.queue.size():
-			for c in _queue_row.get_children():
-				c.free()
+		_update_build_queue([e])
+
+## The build buttons and queue strip for the selected starbase(s). A button is
+## live while any of them can take the hull. With several bases each one's
+## queue follows the last, led by a "#n" tag and its own progress.
+var _queue_key: Array = []
+func _update_build_queue(bases: Array) -> void:
+	bases = bases.filter(func(x): return is_instance_valid(x))
+	if bases.is_empty():
+		return
+	for t in _build_buttons:
+		var why: String = bases[0].can_queue(t)
+		for sb in bases:
+			if sb.can_queue(t) == "":
+				why = ""
+				break
+		_build_buttons[t].disabled = why != ""
+		if why.begins_with("Requires"):
+			_build_buttons[t].tooltip_text = why
+	var key: Array = bases.map(func(x): return x.queue.size())
+	key.append(bases.size())
+	if _queue_row.get_child_count() == 0 or key != _queue_key:
+		_queue_key = key
+		for c in _queue_row.get_children():
+			c.free()
+		for n in bases.size():
+			var sb: Starbase = bases[n]
+			if bases.size() > 1:
+				if sb.queue.is_empty():
+					continue
+				var tag := _label("#%d" % (n + 1), DIM, 13)
+				tag.custom_minimum_size = Vector2(0, 48)
+				tag.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+				_queue_row.add_child(tag)
 			for i in sb.queue.size():
 				var qb := Button.new()
 				qb.custom_minimum_size = Vector2(72, 48)
@@ -1668,16 +1727,24 @@ Starbases %d · upkeep %.2f/min each (empire x%.2f)" % [game.starbase_count(sb.o
 				qb.tooltip_text = "Cancel " + game.ship_name(sb.owner_id, sb.queue[i])
 				var idx := i
 				qb.pressed.connect(func(): sb.cancel(idx))
+				if i == 0:
+					qb.set_meta("base", sb)
 				_queue_row.add_child(qb)
-		if sb.queue.size() > 0 and _queue_row.get_child_count() > 0:
-			var first: Button = _queue_row.get_child(0)
-			first.text = "%d%%" % int(100.0 * sb.build_progress / Defs.SHIPS[sb.queue[0]]["build_time"])
-			first.modulate = Color(1, 0.6, 0.55) if sb.build_stalled else Color.WHITE
-			# Readable over the ship icon behind it.
-			first.add_theme_font_size_override("font_size", 16)
-			first.add_theme_color_override("font_color", Color.WHITE)
-			first.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
-			first.add_theme_constant_override("outline_size", 6)
+	# The front of each queue shows its progress.
+	for c in _queue_row.get_children():
+		if not c.has_meta("base"):
+			continue
+		var sb = c.get_meta("base")
+		if not is_instance_valid(sb) or sb.queue.is_empty():
+			continue
+		var first: Button = c
+		first.text = "%d%%" % int(100.0 * sb.build_progress / Defs.SHIPS[sb.queue[0]]["build_time"])
+		first.modulate = Color(1, 0.6, 0.55) if sb.build_stalled else Color.WHITE
+		# Readable over the ship icon behind it.
+		first.add_theme_font_size_override("font_size", 16)
+		first.add_theme_color_override("font_color", Color.WHITE)
+		first.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+		first.add_theme_constant_override("outline_size", 6)
 
 ## "Unstable" (nearly empty) / the seconds left before it blows.
 func _doom_text(p: Planet) -> String:
@@ -1703,6 +1770,10 @@ func _process(delta: float) -> void:
 		_update_selection_info()
 		_tick_depot_panel()
 		_tick_gate_panel()
+		_outliner_timer -= 0.1
+		if _outliner_timer <= 0.0:
+			_outliner_timer = 0.5
+			_refresh_outliner()
 		_score_timer -= 0.1
 		if _score_timer <= 0.0:
 			_score_timer = 1.0
@@ -1710,6 +1781,7 @@ func _process(delta: float) -> void:
 		_refresh_research()
 		planet_view.refresh()
 	_fit_selection_panel()
+	_fit_outliner()
 	var now := Game.now()
 	_pings = _pings.filter(func(p): return now - p["t"] < 0.5)
 	_flashes = _flashes.filter(func(f): return is_instance_valid(f["node"]) and Time.get_ticks_msec() / 1000.0 - f["real"] < FLASH_TIME)
@@ -1909,6 +1981,147 @@ func _fit_selection_panel() -> void:
 		var left: float = _sel_panel.position.x + _sel_panel.size.x + 12.0
 		_queue_row.size = Vector2(maxf(area.x - MINIMAP_W - left, 200.0), 0.0)
 		_queue_row.position = Vector2(left, area.y - 12.0 - _queue_row.size.y)
+
+# ---------------------------------------------------------------- outliner
+
+## Everything you own, down the left edge while nothing is selected: ships by
+## class, constructs by kind, then your worlds. Click a ship or construct
+## entry: the next one of that kind, camera on it. Shift+click: all of that
+## kind (camera on their middle, except starbases). Click a world: open it.
+var _outliner: PanelContainer
+var _outliner_body: VBoxContainer
+var _outliner_key := ""
+var _outliner_timer := 0.0
+## Per kind, which one a plain click picked last (so clicks step through).
+var _outliner_step := {}
+const OUTLINER_W := 236.0
+
+func _build_outliner(root: Control) -> void:
+	_outliner = PanelContainer.new()
+	_outliner.add_theme_stylebox_override("panel", _panel_style(8))
+	_outliner.visible = false
+	root.add_child(_outliner)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_outliner.add_child(scroll)
+	_outliner_body = VBoxContainer.new()
+	_outliner_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_outliner_body.add_theme_constant_override("separation", 6)
+	scroll.add_child(_outliner_body)
+
+## Shown only with nothing selected or focused; rebuilt only when what you
+## own has changed.
+func _refresh_outliner() -> void:
+	if _outliner == null:
+		return
+	var idle: bool = game.selection.filter(func(e): return is_instance_valid(e)).is_empty() 		and not is_instance_valid(game.focused_planet) and not is_instance_valid(game.focused_asteroid) and not is_instance_valid(game.focused_star)
+	_outliner.visible = idle
+	if not idle:
+		return
+	var pid: int = game.player_id
+	var ships := {}
+	var builds := {}
+	for e in get_tree().get_nodes_in_group("entities"):
+		if not (e is SpaceEntity) or e.owner_id != pid or not e.is_alive() or e.docked:
+			continue
+		var into: Dictionary = ships if e is Ship else builds
+		var k := _kind_of(e)
+		if not into.has(k):
+			into[k] = []
+		into[k].append(e)
+	var worlds: Array = get_tree().get_nodes_in_group("planets").filter(func(p): return p.owner_id == pid)
+	var key := "%s|%s|%s" % [ships.keys().map(func(k): return "%s%d" % [k, ships[k].size()]), builds.keys().map(func(k): return "%s%d" % [k, builds[k].size()]), worlds.map(func(p): return "%s%d" % [p.planet_name, int(p.pop)])]
+	if key == _outliner_key:
+		return
+	_outliner_key = key
+	for c in _outliner_body.get_children():
+		c.queue_free()
+	_outliner_section("Ships", ships)
+	_outliner_section("Constructs", builds)
+	if not worlds.is_empty():
+		_outliner_body.add_child(_label("Worlds", MUTED, 14))
+		for p in worlds:
+			var row := Button.new()
+			row.focus_mode = Control.FOCUS_NONE
+			row.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			row.add_theme_font_size_override("font_size", 13)
+			row.text = "%s   %d pops" % [p.planet_name, int(p.pop)]
+			row.icon = Defs.tex(p.kind)
+			row.expand_icon = true
+			row.add_theme_constant_override("icon_max_width", 18)
+			row.tooltip_text = "Open %s" % p.planet_name
+			row.pressed.connect(func():
+				if is_instance_valid(p):
+					game._set_selection([], false)
+					game._focus_planet(p)
+					game.center_on(p.global_position)
+					game.selection_changed.emit())
+			_outliner_body.add_child(row)
+
+func _outliner_section(title: String, groups: Dictionary) -> void:
+	if groups.is_empty():
+		return
+	_outliner_body.add_child(_label(title, MUTED, 14))
+	var flow := HFlowContainer.new()
+	flow.add_theme_constant_override("h_separation", 6)
+	flow.add_theme_constant_override("v_separation", 6)
+	var kinds: Array = groups.keys()
+	kinds.sort()
+	for k in kinds:
+		var list: Array = groups[k]
+		var tile := PanelContainer.new()
+		tile.add_theme_stylebox_override("panel", _panel_style(2))
+		tile.custom_minimum_size = Vector2(FLEET_TILE.x + 22, FLEET_TILE.y)
+		tile.mouse_filter = Control.MOUSE_FILTER_STOP
+		tile.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		tile.tooltip_text = "%s ×%d
+Click: select the next one. Shift+click: select all." % [list[0].display_name, list.size()]
+		var h := HBoxContainer.new()
+		h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		h.add_theme_constant_override("separation", 2)
+		var art_name := _entity_art(list[0])
+		var tex := Defs.tex(art_name)
+		var wide: bool = tex != null and tex.get_width() * 2.0 / Defs.art_div(art_name) > FLEET_TILE.x - 4.0
+		var art := _icon(art_name, 1 if wide else 2)
+		art.custom_minimum_size = Vector2(minf(art.custom_minimum_size.x, FLEET_TILE.x - 8.0), minf(art.custom_minimum_size.y, FLEET_TILE.y - 8.0))
+		h.add_child(art)
+		h.add_child(_label("×%d" % list.size(), TEXT, 13))
+		tile.add_child(h)
+		tile.gui_input.connect(_on_outliner_input.bind(k, list[0] is Ship))
+		flow.add_child(tile)
+	_outliner_body.add_child(flow)
+
+func _on_outliner_input(ev: InputEvent, kind: String, is_ship: bool) -> void:
+	if not (ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed):
+		return
+	get_viewport().set_input_as_handled()
+	var all: Array = get_tree().get_nodes_in_group("ships" if is_ship else "entities").filter(func(e):
+		return e is SpaceEntity and e.owner_id == game.player_id and e.is_alive() and not e.docked and (e is Ship) == is_ship and _kind_of(e) == kind)
+	if all.is_empty():
+		return
+	if ev.shift_pressed:
+		game._set_selection(all, false)
+		if kind != "starbase":
+			game.center_on(game._centroid(all))
+		return
+	var i: int = (int(_outliner_step.get(kind, -1)) + 1) % all.size()
+	_outliner_step[kind] = i
+	game._set_selection([all[i]], false)
+	game.center_on(all[i].global_position)
+
+## Down the left edge: under the speed column (and the Mod / research cards
+## below it), above the selection panel.
+func _fit_outliner() -> void:
+	if not _outliner.visible:
+		return
+	var top: float = _mod_status.position.y + (_mod_status.size.y + 10.0 if not _mod_status_ids.is_empty() else 0.0)
+	if _side_techs.visible:
+		top = maxf(top, _side_techs.position.y + _side_techs.size.y + 10.0)
+	var bottom: float = _sel_panel.position.y - 10.0 if _sel_panel.visible else _outliner.get_parent_area_size().y - 12.0
+	var want: float = _outliner_body.get_combined_minimum_size().y + 20.0
+	_outliner.get_child(0).custom_minimum_size = Vector2(OUTLINER_W - 16.0, clampf(want, 40.0, maxf(bottom - top, 40.0)) - 16.0)
+	_outliner.position = Vector2(HUD_SIDE, top)
+	_outliner.size = Vector2.ZERO
 
 func set_drag_rect(r: Rect2) -> void:
 	_drag_rect = r
