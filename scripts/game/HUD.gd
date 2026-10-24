@@ -1209,7 +1209,6 @@ func _rebuild_selection() -> void:
 		_add_constructor_buttons()
 	_add_engagement_row(sel)
 	_add_stance_row(sel)
-	_add_refit_buttons(sel)
 
 ## How many ships of a selection get their own condition tile before the rest
 ## are summarised. A wall of tiles stops being readable long before the panel
@@ -1389,7 +1388,6 @@ func _build_ship_controls(s: Ship) -> void:
 	_add_job_panel(s)
 	_add_engagement_row([s])
 	_add_stance_row([s])
-	_add_refit_buttons([s])
 	match s.def["role"]:
 		"colony":
 			_sel_body.add_child(_label("Right-click an unowned planet to settle it with %d pops." % int(Defs.START_POP), DIM, 13))
@@ -2726,23 +2724,6 @@ func _add_constructor_buttons() -> void:
 		_register_action(fb)
 		grid.add_child(fb)
 	_sel_body.add_child(grid)
-
-## Generalist warships selected: one line saying how a refit happens. No
-## variant buttons — the depot you send a ship to decides what it becomes,
-## so the choice lives on the map, not in this panel.
-func _add_refit_buttons(sel: Array) -> void:
-	var bases := {}
-	for e in sel:
-		if e is Ship and e.owner_id == game.player_id and not e.def.has("variant") and Defs.VARIANTS_OF.has(e.ship_type):
-			bases[e.ship_type] = true
-	if bases.is_empty():
-		return
-	# Refit costs and times are per hull (Defs.SHIPS[type].refit).
-	var costs: Array = []
-	for b in bases:
-		var r: Dictionary = Defs.SHIPS[b]["refit"]
-		costs.append("%s %d minerals, %ds" % [Defs.SHIPS[b]["name"], int(r["minerals"]), int(r["time"])])
-	_sel_body.add_child(_label("Right-click a Weapons Depot to refit (permanent, one way): " + ", ".join(costs), DIM, 13))
 
 ## A selected Weapons Depot: which variant it fits and the ships docked
 ## inside, each with a Cancel button. A cancelled ship leaves the way it went
