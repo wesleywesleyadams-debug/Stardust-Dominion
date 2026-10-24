@@ -2828,7 +2828,34 @@ func _formation(ships: Array, goal: Vector2) -> Array:
 		var in_row := mini(cols, n - row * cols)
 		var off := side * (col - (in_row - 1) / 2.0) * spacing - fwd * row * spacing
 		out.append(goal + off)
-	return out
+	# Radiation Sail Arrays take the slots nearest the middle of the
+	# formation, so the rest of the group forms around their shield bubble.
+	var sails := []
+	for i in n:
+		if ships[i].def.has("solar_sail"):
+			sails.append(i)
+	if sails.is_empty() or sails.size() == n:
+		return out
+	var mid := Vector2.ZERO
+	for p in out:
+		mid += p
+	mid /= n
+	var by_mid := range(n)
+	by_mid.sort_custom(func(a, b): return out[a].distance_to(mid) < out[b].distance_to(mid))
+	var slot_of := {}
+	for k in sails.size():
+		slot_of[sails[k]] = by_mid[k]
+	var rest: Array = by_mid.slice(sails.size())
+	rest.sort()   # the others keep their front-to-back order
+	var j := 0
+	for i in n:
+		if not slot_of.has(i):
+			slot_of[i] = rest[j]
+			j += 1
+	var placed := []
+	for i in n:
+		placed.append(out[slot_of[i]])
+	return placed
 
 # ---------------------------------------------------------------- dev capture
 
