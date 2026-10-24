@@ -177,7 +177,8 @@ func _regen_shields(delta: float) -> void:
 			if self is Ship and Game.instance.has_tech(owner_id, "spice_navigation"):
 				m *= Abilities.SPICE_NAV_RADIATION
 			take_damage(SpiceNebula.RADIATION_DPS * delta * m, null)
-			if owner_id == Game.instance.player_id:
+			# (Paused is time scale 0: no damage, so no warning either.)
+			if owner_id == Game.instance.player_id and delta > 0.0:
 				Game.instance.warn_nebula(global_position)
 			return
 	# EMP'd: no recharge; redraw every frame for the flicker.
