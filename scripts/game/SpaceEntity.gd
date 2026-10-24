@@ -236,6 +236,36 @@ func _arc_points(arc_radius: float, mid: float, span: float, steps: int) -> Pack
 		pts.append(Vector2(cos(a), sin(a)) * arc_radius)
 	return pts
 
+## The selection ring, leaving out the stretches that fall inside another
+## selected ring, so a packed selection shows one merged outline.
+func _draw_sel_ring(on: CanvasItem, r: float, col: Color) -> void:
+	var others: Array = []
+	for e in Game.instance.selection:
+		if e == self or not is_instance_valid(e) or not (e is SpaceEntity):
+			continue
+		var er: float = e.radius + 4.0
+		var d: Vector2 = e.global_position - global_position
+		if d.length() < r + er:
+			others.append([d, er])
+	if others.is_empty():
+		on.draw_polyline(_arc_points(r, 0.0, TAU, 40), col, 1.0, true)
+		return
+	var n := 48
+	var seg := PackedVector2Array()
+	for i in n + 1:
+		var p := Vector2.from_angle(TAU * i / n) * r
+		var hidden := false
+		for o in others:
+			if p.distance_to(o[0]) < o[1]:
+				hidden = true
+				break
+		if not hidden:
+			seg.append(p)
+		if (hidden or i == n) and seg.size() > 1:
+			on.draw_polyline(seg, col, 1.0, true)
+		if hidden:
+			seg = PackedVector2Array()
+
 ## Draws the gauges into `on` (the overlay), not into this node.
 func draw_status(on: CanvasItem) -> void:
 	var emp := Abilities.emp_on(self)
@@ -247,8 +277,9 @@ func draw_status(on: CanvasItem) -> void:
 		# A ring rather than corner brackets, so the marker reads the same
 		# whatever the hull under it is doing.
 		var col := Defs.team_color(owner_id)
-		# Faint, so a large selection doesn't bury the ships in rings.
-		on.draw_polyline(_arc_points(r + 1.0, 0.0, TAU, 40), Color(col, 0.4), 1.0, true)
+		# Faint, so a large selection doesn't bury the ships in rings; where
+		# selected rings overlap, only their combined outline is drawn.
+		_draw_sel_ring(on, r + 1.0, Color(col, 0.4))
 	# The gauges are for damage, not for decoration: an untouched ship shows
 	# nothing above it, selected or not.
 	if not damaged:
