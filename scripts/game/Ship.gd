@@ -2017,6 +2017,9 @@ func _separation() -> Vector2:
 					push += Vector2.from_angle(randf() * TAU) * 6.0
 	return push
 
+## Share of its wanted speed a hull keeps flying forward while it turns to travel.
+const TURN_THRUST := 0.75
+
 ## Radians a second this hull turns: bigger hulls turn slower.
 func turn_rate() -> float:
 	return clampf(6.0 * 8.0 / radius, 1.2, 6.0) * Game.instance.ship_speed_factor(owner_id) * Game.instance.mod(owner_id, "turn_rate")
@@ -2079,9 +2082,11 @@ func _steer(desired: Vector2, delta: float, face: Node2D) -> void:
 			turning = true
 	else:
 		_face_lock = false
+	var travel_turn := false
 	if not turning and not small and not parked:
 		head = want.angle()
 		turning = true
+		travel_turn = true
 	if turning:
 		var diff := angle_difference(rotation, head)
 		# Nearly dead astern: keep turning the way we already were.
@@ -2096,6 +2101,10 @@ func _steer(desired: Vector2, delta: float, face: Node2D) -> void:
 	var fwd := Vector2.from_angle(rotation)
 	var r := fwd.orthogonal()
 	var bt2 := _body_thrust(rotation, want, lat, rev)
+	# Coming about to travel: the engines keep pushing along the nose at
+	# TURN_THRUST of the wanted speed instead of stalling while it turns.
+	if travel_turn:
+		bt2.x = maxf(bt2.x, want.length() * TURN_THRUST)
 	var vf := move_toward(velocity.dot(fwd), bt2.x, accel * delta)
 	var vl := move_toward(velocity.dot(r), bt2.y, accel * delta)
 	velocity = fwd * vf + r * vl
