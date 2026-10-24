@@ -239,7 +239,9 @@ func _arc_points(arc_radius: float, mid: float, span: float, steps: int) -> Pack
 ## The selection ring, leaving out the stretches that fall inside another
 ## selected ring, so a packed selection shows one merged outline.
 func _draw_sel_ring(on: CanvasItem, r: float, col: Color) -> void:
-	var others: Array = []
+	var others: Array = []   # rings this one overlaps
+	var near: Array = []     # rings close enough to wall in a gap
+	var reach := r * 3.0
 	for e in Game.instance.selection:
 		if e == self or not is_instance_valid(e) or not (e is SpaceEntity):
 			continue
@@ -247,18 +249,30 @@ func _draw_sel_ring(on: CanvasItem, r: float, col: Color) -> void:
 		var d: Vector2 = e.global_position - global_position
 		if d.length() < r + er:
 			others.append([d, er])
+		if d.length() < r + er + reach:
+			near.append([d, er])
 	if others.is_empty():
 		on.draw_polyline(_arc_points(r, 0.0, TAU, 40), col, 1.0, true)
 		return
 	var n := 48
 	var seg := PackedVector2Array()
 	for i in n + 1:
-		var p := Vector2.from_angle(TAU * i / n) * r
+		var dir := Vector2.from_angle(TAU * i / n)
+		var p := dir * r
 		var hidden := false
 		for o in others:
 			if p.distance_to(o[0]) < o[1]:
 				hidden = true
 				break
+		# A small gap inside the group: looking outward from here another
+		# selected ring is met almost at once, so this is no outer edge.
+		if not hidden:
+			for o in near:
+				var rel: Vector2 = o[0] - p
+				var along := rel.dot(dir)
+				if along > 0.0 and along < reach and absf(rel.cross(dir)) < o[1]:
+					hidden = true
+					break
 		if not hidden:
 			seg.append(p)
 		if (hidden or i == n) and seg.size() > 1:
