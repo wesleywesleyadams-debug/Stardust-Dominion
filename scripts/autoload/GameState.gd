@@ -246,8 +246,32 @@ func account_settings_path() -> String:
 	var key := _sanitize_for_path(active_account) if not active_account.is_empty() else GUEST_SAVES_KEY
 	return "user://accounts/%s/settings.cfg" % key
 
+## Widest a tooltip grows before its text wraps, in pixels.
+const TOOLTIP_WIDTH := 460.0
+
+## Godot's built-in tooltip is a Label (theme type "TooltipLabel") in a
+## PopupPanel, sized to its text on one line. Wrapping it at TOOLTIP_WIDTH
+## as it enters the tree - before the viewport measures and places it -
+## makes long tips a compact block that stays on screen.
+func _wrap_tooltip(n: Node) -> void:
+	if not (n is Label) or n.theme_type_variation != "TooltipLabel":
+		return
+	var lab := n as Label
+	var font := lab.get_theme_font("font")
+	var fs := lab.get_theme_font_size("font_size")
+	var w: float = 0.0
+	for line in lab.text.split("
+"):
+		w = maxf(w, font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x if font else 0.0)
+	if w <= TOOLTIP_WIDTH:
+		return
+	lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lab.custom_minimum_size.x = TOOLTIP_WIDTH
+
 func _ready() -> void:
 	load_settings()
+	# Long tooltips wrap into a readable block instead of one screen-wide line.
+	get_tree().node_added.connect(_wrap_tooltip)
 	_enforce_fullscreen()
 	# Paint the tech icons on a worker thread now, so the match's research
 	# screen and the Codex find them ready instead of stalling ~2 s.
