@@ -1246,6 +1246,9 @@ class FleetTile extends Control:
 	func _draw() -> void:
 		if not is_instance_valid(host):
 			return
+		# Untouched: no bars, so the damaged ships stand out.
+		if host.hp >= host.max_hp and host.armor >= host.max_armor and host.shield >= host.max_shield:
+			return
 		var w := size.x - 4.0
 		var y := size.y - BARS_H
 		var shield_col: Color = host.shield_color() if host.has_method("shield_color") else Defs.LAYER_COLORS["shield"]
@@ -1270,6 +1273,11 @@ func _add_fleet_tiles(sel: Array) -> void:
 	_fleet_tiles.clear()
 	var ships: Array = sel.filter(func(e): return (e is Ship or e is Starbase) and e.owner_id == game.player_id)
 	if ships.size() < 2:
+		return
+	# Ships at full strength get no tile: the type row above already counts
+	# them, so only the damaged ones are listed (starbases always are).
+	ships = ships.filter(func(e): return e is Starbase or _damaged(e))
+	if ships.is_empty():
 		return
 	# Worst first: the ships that need the player's attention lead.
 	ships.sort_custom(func(a, b): return _condition(a) < _condition(b))
@@ -1342,6 +1350,9 @@ func _kind_of(e: SpaceEntity) -> String:
 	if e is FortConstruct:
 		return (e as FortConstruct).sprite_name().trim_prefix("ship_")
 	return e.display_name
+
+func _damaged(e: SpaceEntity) -> bool:
+	return e.hp < e.max_hp or e.armor < e.max_armor or e.shield < e.max_shield
 
 ## A ship's condition as one number (0-1), worst layer first: hull decides,
 ## with armor and shields breaking ties.
@@ -1593,6 +1604,16 @@ func _tick_depot_panel() -> void:
 
 func _update_selection_info() -> void:
 	_refresh_ability_button()
+	# A ship took damage or was repaired: rebuild so the tiles list exactly
+	# the damaged ones.
+	var hurt := 0
+	for e in game.selection:
+		if is_instance_valid(e) and e is Ship and e.owner_id == game.player_id and _damaged(e):
+			hurt += 1
+	var shown := _fleet_tiles.filter(func(t): return is_instance_valid(t) and t.host is Ship).size()
+	if mini(hurt, FLEET_TILES_MAX) != shown and game.selection.size() > 1:
+		_rebuild_selection()
+		return
 	for t in _fleet_tiles:
 		if is_instance_valid(t):
 			t.queue_redraw()
