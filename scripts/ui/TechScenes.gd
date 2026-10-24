@@ -95,11 +95,13 @@ static func call_scene(id: String, img: Image) -> void:
 			# missile, then the chain bounces on to the rest, each one X'd out.
 			_pd_net(img, [[Vector2(30, 38), 17.0, 1.0, false], [Vector2(12, 32), 13.0, 0.75, false], [Vector2(46, 28), 13.0, 0.75, false], [Vector2(54, 44), 11.0, 0.6, true]])
 		"mod_interceptor_drones":
-			_sprite(img, "ship_carrier", C, 26.0)
-			_ring(img, C, 22.0, 1.0, Color("7fd8ff", 0.35))
-			for k in 4:
-				var q := C + Vector2.from_angle(TAU * k / 4.0 + 0.4) * 22.0
-				_poly(img, [q + Vector2(-3, 3), q + Vector2(0, -4), q + Vector2(3, 3)], Color("c8d2ea"))
+			# R1: the carrier centred with its four Interceptor Drones patrolling a
+			# thin dashed orbit ring, each facing along the orbit.
+			var cc := Vector2(32, 33)
+			_drone_ring(img, cc, 25.0, 25.0, true, true, 0.55)
+			_sprite(img, "ship_carrier", cc, 36.0)
+			for a in [0.5, 2.07, 3.64, 5.21]:
+				_orbit_drone(img, cc, 25.0, 25.0, a, 1.2, 1.0)
 		"mod_tractor_beams":
 			_sprite(img, "ship_carrier", Vector2(16, 44), 24.0)
 			_poly(img, [Vector2(24, 38), Vector2(52, 10), Vector2(58, 18)], Color("9fffb0", 0.25))
@@ -2100,3 +2102,28 @@ static func _pd_net(img: Image, ords: Array) -> void:
 	_pd_line(img, cs)
 	for k in ords.size():
 		_pd_x(img, cs[k], 3.0 + float(ords[k][1]) * 0.12)
+
+## The real Interceptor Drone: a light dart (polygon (5,0) (-4,-4) (-2,0) (-4,4)) with
+## a green team-colour tail, scaled by s, heading along `heading`.
+static func _drone_dart(img: Image, p: Vector2, heading: float, s: float, dim: float) -> void:
+	var f := Vector2.from_angle(heading)
+	var n := f.orthogonal()
+	var pt := func(x: float, y: float) -> Vector2: return p + f * x * s + n * y * s
+	_poly(img, [pt.call(5.8, 0.0), pt.call(-4.9, -4.9), pt.call(-2.4, 0.0), pt.call(-4.9, 4.9)], STEEL[0])
+	_poly(img, [pt.call(5.0, 0.0), pt.call(-4.0, -4.0), pt.call(-2.0, 0.0), pt.call(-4.0, 4.0)], Color("c8d2ea") * dim)
+	_poly(img, [pt.call(5.0, 0.0), pt.call(-4.0, -4.0), pt.call(-2.0, 0.0)], Color("e8f0ff") * dim)
+	_poly(img, [pt.call(-2.0, -2.0), pt.call(-2.0, 2.0), pt.call(-4.0, 0.0)], Color("4ade80"))
+
+## A thin dashed orbit ring (an ellipse rx x ry); front / back pick the near or far half.
+static func _drone_ring(img: Image, cc: Vector2, rx: float, ry: float, front: bool, back: bool, alpha: float) -> void:
+	for k in 48:
+		var a0 := k * TAU / 48.0
+		var a1 := a0 + TAU / 96.0
+		var mid := sin((a0 + a1) * 0.5)
+		if (mid > 0.0 and not front) or (mid <= 0.0 and not back):
+			continue
+		_line(img, cc + Vector2(cos(a0) * rx, sin(a0) * ry), cc + Vector2(cos(a1) * rx, sin(a1) * ry), 0.8, Color(0.55, 0.75, 0.9, alpha))
+
+## A drone at angle a on the orbit, facing along it.
+static func _orbit_drone(img: Image, cc: Vector2, rx: float, ry: float, a: float, s: float, dim: float) -> void:
+	_drone_dart(img, cc + Vector2(cos(a) * rx, sin(a) * ry), Vector2(-sin(a) * rx, cos(a) * ry).angle(), s, dim)
