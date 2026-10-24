@@ -2626,10 +2626,7 @@ func _box_select(screen_rect: Rect2, additive: bool) -> void:
 	var b: Vector2 = xf * screen_rect.end
 	var r := Rect2(a, b - a).abs()
 	var picked: Array = get_tree().get_nodes_in_group("ships").filter(func(s): return s.owner_id == player_id and r.grow(s.radius * 0.5).has_point(s.global_position))
-	# Box-selecting a mixed group keeps only warships, like most RTS games.
-	var warships := picked.filter(func(s): return s.def["role"] == "warship")
-	if not warships.is_empty():
-		picked = warships
+	# Box-selecting takes every ship in the box, warships and support alike.
 	if picked.is_empty():
 		for sb in get_tree().get_nodes_in_group("starbases"):
 			if sb.owner_id == player_id and r.has_point(sb.global_position):
