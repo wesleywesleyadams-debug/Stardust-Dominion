@@ -2830,13 +2830,16 @@ func _formation(ships: Array, goal: Vector2) -> Array:
 		out.append(goal + off)
 	# Radiation Sail Arrays take the slots nearest the middle of the
 	# formation, so the rest of the group forms around their shield bubble;
-	# Repair Tenders take the next most central slots.
+	# Repair Tenders take the next most central slots, then harvesters.
 	var sails := []
 	for i in n:
 		if ships[i].def.has("solar_sail"):
 			sails.append(i)
 	for i in n:
 		if ships[i].def.get("job", "") == "field_repair":
+			sails.append(i)
+	for i in n:
+		if ships[i].is_miner() and not sails.has(i):
 			sails.append(i)
 	if sails.is_empty() or sails.size() == n:
 		return out
