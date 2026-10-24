@@ -130,6 +130,7 @@ gh workflow run balance.yml -f mode=sims -f runs=6 -f minutes=60 -f speed=4
 - **Estimates miss nonlinear effects:** guns × toughness underrates range (starbase and outpost reach 260), and toughness changes act nonlinearly, so when two runs bracket the target, split the difference.
 - **Toughness acts in steps:** lasers deal fixed 10-damage hits, so a class only changes when toughness crosses a hit-count threshold. Cruiser 800 and 795 scored the same; 790 jumped to the other side of 0. Near the target, expect a jump rather than a smooth slope.
 - **Sensitivity varies:** 1.5–2× Mod buffs barely showed, but +12% damage moved a variant by +0.33.
+- **Built starbases had 0 armor until 5c579ce (10-24):** starbases finished during a match got shields but no armor, about 44% under their real toughness. AI sims before that commit are affected; construct duels are not (the harness spawns finished starbases).
 - **Sims find AI bugs:** gas giants counted as free worlds, corvette-only builds when out of spice, bombarding only small worlds, colony ships dying in nebulae, stalled fog-memory guesses.
 
 ## Baselines
