@@ -236,49 +236,48 @@ func _arc_points(arc_radius: float, mid: float, span: float, steps: int) -> Pack
 		pts.append(Vector2(cos(a), sin(a)) * arc_radius)
 	return pts
 
-## The selection ring, leaving out the stretches that fall inside another
-## selected ring, so a packed selection shows one merged outline.
+static func _poly_area(p: PackedVector2Array) -> float:
+	var a := 0.0
+	for i in p.size():
+		a += p[i].cross(p[(i + 1) % p.size()])
+	return a * 0.5
+
+## The selection ring. With several things selected, the first of them draws
+## the outline of all their rings merged into one shape (union of circles,
+## holes dropped), and the rest draw nothing - so a packed selection shows a
+## single unbroken outer outline.
 func _draw_sel_ring(on: CanvasItem, r: float, col: Color) -> void:
-	var others: Array = []   # rings this one overlaps
-	var near: Array = []     # rings close enough to wall in a gap
-	var reach := r * 3.0
-	for e in Game.instance.selection:
-		if e == self or not is_instance_valid(e) or not (e is SpaceEntity):
-			continue
-		var er: float = e.radius + 4.0
-		var d: Vector2 = e.global_position - global_position
-		if d.length() < r + er:
-			others.append([d, er])
-		if d.length() < r + er + reach:
-			near.append([d, er])
-	if others.is_empty():
+	var sel: Array = Game.instance.selection.filter(func(e): return is_instance_valid(e) and e is SpaceEntity and e.selected)
+	if sel.size() < 2:
 		on.draw_polyline(_arc_points(r, 0.0, TAU, 40), col, 1.0, true)
 		return
-	var n := 48
-	var seg := PackedVector2Array()
-	for i in n + 1:
-		var dir := Vector2.from_angle(TAU * i / n)
-		var p := dir * r
-		var hidden := false
-		for o in others:
-			if p.distance_to(o[0]) < o[1]:
-				hidden = true
-				break
-		# A small gap inside the group: looking outward from here another
-		# selected ring is met almost at once, so this is no outer edge.
-		if not hidden:
-			for o in near:
-				var rel: Vector2 = o[0] - p
-				var along := rel.dot(dir)
-				if along > 0.0 and along < reach and absf(rel.cross(dir)) < o[1]:
-					hidden = true
-					break
-		if not hidden:
-			seg.append(p)
-		if (hidden or i == n) and seg.size() > 1:
-			on.draw_polyline(seg, col, 1.0, true)
-		if hidden:
-			seg = PackedVector2Array()
+	if sel[0] != self:
+		return
+	var merged: Array = []
+	for e in sel:
+		var c: Vector2 = e.global_position - global_position
+		var pts := PackedVector2Array()
+		for k in 32:
+			pts.append(c + Vector2.from_angle(TAU * k / 32.0) * (e.radius + 4.0))
+		var next: Array = []
+		for m in merged:
+			if Geometry2D.intersect_polygons(m, pts).is_empty():
+				next.append(m)
+			else:
+				# The outer boundary is the largest of the pieces (the rest are
+				# holes inside the group).
+				var best := 0.0
+				for q in Geometry2D.merge_polygons(m, pts):
+					var ar := absf(_poly_area(q))
+					if ar > best:
+						best = ar
+						pts = q
+		next.append(pts)
+		merged = next
+	for m in merged:
+		var loop: PackedVector2Array = m.duplicate()
+		loop.append(m[0])
+		on.draw_polyline(loop, col, 1.0, true)
 
 ## Draws the gauges into `on` (the overlay), not into this node.
 func draw_status(on: CanvasItem) -> void:
