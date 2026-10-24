@@ -1212,6 +1212,14 @@ func do_or_queue(queued: bool, method: String, args: Array) -> void:
 		order_queue.clear()
 	callv(method, args)
 
+## The next queued order is another move: this waypoint is passed through.
+func _passing_through() -> bool:
+	return not order_queue.is_empty() and str(order_queue[0][0]) in ["order_move", "order_attack_move"]
+
+## How close a passed-through waypoint counts as reached (faster = wider).
+func _pass_radius() -> float:
+	return maxf(14.0, max_speed() * 0.25)
+
 ## Starts the next queued order; drops entries whose target is gone.
 func _pop_order() -> void:
 	while not order_queue.is_empty():
@@ -1414,9 +1422,17 @@ func _physics_process(delta: float) -> void:
 						_leave_nebula()
 			desired = _arrive(move_goal, 0.0)
 		State.MOVE:
-			desired = _arrive(move_goal, 1.0)
-			if global_position.distance_to(move_goal) < 6.0:
-				state = State.IDLE
+			# A queued move after this one: fly through the waypoint at speed
+			# and take the next leg from here, instead of braking to a stop.
+			if _passing_through():
+				desired = (move_goal - global_position).normalized() * max_speed()
+				if global_position.distance_to(move_goal) < _pass_radius():
+					state = State.IDLE
+					_pop_order()
+			else:
+				desired = _arrive(move_goal, 1.0)
+				if global_position.distance_to(move_goal) < 6.0:
+					state = State.IDLE
 		State.ATTACK_MOVE:
 			if _acquire_timer <= 0.0:
 				# Flying back to the anchor after a self-picked fight: only
@@ -1437,10 +1453,17 @@ func _physics_process(delta: float) -> void:
 					var ep := Game.instance.nearest_enemy_planet(owner_id, global_position, weapon_range())
 					if ep != null and not _guard:
 						order_bombard(ep)
-			desired = _arrive(attack_move_goal, 1.0)
-			if global_position.distance_to(attack_move_goal) < 8.0:
-				state = State.IDLE
-				move_goal = global_position
+			if _passing_through():
+				desired = (attack_move_goal - global_position).normalized() * max_speed()
+				if global_position.distance_to(attack_move_goal) < _pass_radius():
+					state = State.IDLE
+					move_goal = global_position
+					_pop_order()
+			else:
+				desired = _arrive(attack_move_goal, 1.0)
+				if global_position.distance_to(attack_move_goal) < 8.0:
+					state = State.IDLE
+					move_goal = global_position
 				_guard = false
 		State.ATTACK:
 			# A target that slips out of sight (into fog or a nebula) is lost.
