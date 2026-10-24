@@ -400,9 +400,14 @@ func _fire_turrets(delta: float) -> void:
 		for k in per:
 			if randf() < acc or wpn == "missile":   # missiles never miss
 				n_hit += 1
+				var gap: float = float(weapon_mod.get("burst", 0.0))
 				for j in n_proj:
 					var off := 0.0 if n_proj == 1 else lerpf(-spread, spread, float(j) / (n_proj - 1)) + randf_range(-0.06, 0.06)
-					g.fire(self, tgt, wpn, shot, off, _muzzle(i))
+					if gap <= 0.0 or j == 0:
+						g.fire(self, tgt, wpn, shot, off, _muzzle(i))
+					else:
+						# Burst: the rest leave this turret one after another.
+						_burst_shot(j * gap, tgt, wpn, shot, off, i)
 		if DuelStats.on:
 			DuelStats.tick(self, "fire")
 			DuelStats.pull(self, tgt, acc, per, n_hit, moving_frac())
@@ -415,6 +420,16 @@ func _fire_turrets(delta: float) -> void:
 		had_beams = true
 	if had_beams or not _beams.is_empty() or not _tbeams.is_empty():
 		queue_redraw()
+
+## One shot of a burst, `after` game seconds from now, if this ship and its
+## target are both still there.
+func _burst_shot(after: float, tgt: SpaceEntity, wpn: String, shot: float, off: float, i: int) -> void:
+	await get_tree().create_timer(after, false).timeout
+	if not is_instance_valid(self) or not is_alive() or not is_instance_valid(tgt) or not tgt.is_alive():
+		return
+	if i >= _turret_sprites.size():
+		return
+	Game.instance.fire(self, tgt, wpn, shot, off, _muzzle(i))
 
 ## Where turret `i`'s shots leave: the tip of its barrel (the sprite's
 ## barrel points along +x, half the sprite's width from its centre).

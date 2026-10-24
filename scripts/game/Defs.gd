@@ -831,7 +831,7 @@ const MOD_WEAPONS := {
 	# No lasers: each turret holds a beam that pulls and burns at dmg x a laser's DPS
 	# x a factor: [pull/s, reach x range, factor at full reach, factor once pulled in].
 	"mod_tractor_beams": {"tractor": [60.0, 2.0, 0.5, 1.5], "dmg": 0.51},
-	"mod_missile_barrage": {"weapon": "missile", "dmg": 0.27, "count": 5, "cd": 8.0, "range": 1.6, "spread": 0.5},
+	"mod_missile_barrage": {"weapon": "missile", "dmg": 0.27, "count": 5, "cd": 8.0, "range": 1.6, "spread": 0.5, "burst": 0.15},
 }
 
 static func damage_profile(d: Dictionary) -> Dictionary:
