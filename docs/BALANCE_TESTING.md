@@ -137,6 +137,7 @@ gh workflow run balance.yml -f mode=sims -f runs=6 -f minutes=60 -f speed=4
 - **Classes, Symmetry step 8 (10-22):** toughness corvette 150 (66/50/34), destroyer 300 (99/132/69), cruiser 800 (264/184/352), carrier 2400 (552/792/1056). Weights destroyer +0.04, carrier +0.01, corvette −0.01, cruiser −0.03.
 - **Pre-resize (409d03c):** win rates carrier 64.4, cruiser 57.4, corvette 42.8, destroyer 35.4%; weights within ±0.05.
 - **After the resize (old hitboxes, new turret positions):** cruiser at 800 toughness had weight +0.07. Retuned 10-24 to **cruiser 790** (260.7 / 181.7 / 347.6): weight −0.06 (360 duels). 795 and 800 both gave +0.07; toughness acts in steps (fixed 10-damage hits), so exactly 0.0 was not reachable and the closer side was taken.
+- **Accepted class balance (10-24, run 40093186694, 720 duels):** carrier +0.07 (66.4%), cruiser −0.07 (57.4%), corvette −0.01 (40.3%), destroyer 0.00 (36.0%). All within about one noise width of even; the user accepted it as is.
 - **Mods pass 5** (`rr_all16x9`, 2400): all −0.01 to +0.06. Damage: Homing Missiles 0.54, Flak 0.67, Cluster Bombs 0.45, Tractor 0.51, Kinetic Repeaters 0.46, PD Lattice 0.91, Interceptor Drones 2.45.
 - **Variants pass 4:** Plazer 0.79, Breacher 0.81, Ravager 0.83, Disruptor 0.36, Inhibitor 0.83 (EMP cooldown 4 s / guns); all −0.02 to +0.05 over plain.
 - **Defense (free techs):** Deflectors −6/−7/−10% → +71; Shields +73, Armor +68, Hull +69.
