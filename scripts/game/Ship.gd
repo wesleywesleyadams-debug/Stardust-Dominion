@@ -2040,8 +2040,8 @@ func _separation() -> Vector2:
 					push += Vector2.from_angle(randf() * TAU) * 6.0
 	return push
 
-## Share of its wanted speed a hull keeps flying forward while it turns to travel.
-const TURN_THRUST := 0.75
+## Share of its wanted speed a hull keeps flying forward while it turns (full speed: turning never slows it).
+const TURN_THRUST := 1.0
 
 ## Radians a second this hull turns: bigger hulls turn slower.
 func turn_rate() -> float:
