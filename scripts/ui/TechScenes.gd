@@ -90,10 +90,10 @@ static func call_scene(id: String, img: Image) -> void:
 			# streak (the real rail shot) at a far enemy carrier, in parallel.
 			_rail_scene(img, Vector2(52, 12), 22.0, [{"i": 0, "from": 0.2, "to": 0.7, "w": 0.9}, {"i": 1, "from": 0.35, "to": 0.85, "w": 0.9}, {"i": 2, "from": 0.1, "to": 0.6, "w": 0.9}])
 		"mod_point_defense_lattice":
-			# G: the cruiser's hub turret needles three incoming missiles out of the
-			# sky in turn, the needle bouncing on from one to the next; each missile
-			# points its red warhead at the cruiser, plume trailing away.
-			_pd_scene(img, [Vector2(48, 38), Vector2(38, 28), Vector2(28, 18)], 10.0)
+			# D: a defensive net locks on to incoming ordnance (noses pointing down at
+			# the defence): a fan of needles rises from the bottom edge to the first
+			# missile, then the chain bounces on to the rest, each one X'd out.
+			_pd_net(img, [[Vector2(30, 38), 17.0, 1.0, false], [Vector2(12, 32), 13.0, 0.75, false], [Vector2(46, 28), 13.0, 0.75, false], [Vector2(54, 44), 11.0, 0.6, true]])
 		"mod_interceptor_drones":
 			_sprite(img, "ship_carrier", C, 26.0)
 			_ring(img, C, 22.0, 1.0, Color("7fd8ff", 0.35))
@@ -2037,61 +2037,66 @@ static func _rail_scene(img: Image, tgt: Vector2, tbox: float, shots: Array) -> 
 		var i: int = sh["i"]
 		_rail_needle(img, ms[i].lerp(hit, sh["from"]), ms[i].lerp(hit, sh["to"]), sh["w"])
 
-## Our cruiser at `ship` (box `box`) with its three turrets drawn at the game's
-## mounts, turret sprites scaled by `tscale`; returns the three muzzle points.
-static func _cr_turrets_at(img: Image, ship: Vector2, box: float, lit: Vector2, tscale: float) -> Array:
-	var ang := -PI / 4.0
-	var d := Vector2.from_angle(ang)
-	var rim := Color("cfe6ff")
-	_spr_rim(img, "ship_cruiser", ship, box, ang, ship + d * box * 0.5, box * 0.65, rim, 1.0, 0.0, false)
-	var k_px := box / 148.0
-	var tpos := [Vector2(38.8, -1.1), Vector2(23.7, -28.4), Vector2(23.7, 25.9)]
-	var out := []
-	for i in 3:
-		var tc: Vector2 = ship + (tpos[i] * k_px).rotated(ang)
-		_spr_rim(img, "ship_turret", tc, 22.0 * k_px * 0.82 * tscale, ang, lit, 45.0, rim, 1.0, 0.0, false)
-		out.append(tc + d * 22.0 * k_px * 0.82 * tscale * 0.5)
-	return out
-
-## An incoming enemy missile, nose at p heading down-left at our cruiser: steel body,
-## fins, a red warhead cone, and a short soft orange plume trailing away.
-static func _pd_missile(img: Image, p: Vector2, size: float) -> void:
-	var d := Vector2(-0.7071, 0.7071)
-	var n := d.orthogonal()
+## An incoming enemy missile (nose at p, heading straight down at the defence):
+## steel body, fins, a red warhead cone, a soft orange plume above. dim fades it.
+static func _pd_ord(img: Image, p: Vector2, size: float, dim: float, torpedo: bool) -> void:
+	var d := Vector2(0.0, 1.0)
+	var n := Vector2(1.0, 0.0)
+	var body: Array = STEEL.map(func(c): return c * dim)
+	if torpedo:
+		var w := size * 0.27
+		var tail := p - d * size * 0.9
+		for k in 3:
+			_disc(img, tail - d * (w * 0.8 + k * w * 1.2), w * (1.2 - k * 0.3), Color("ff8a2a", (0.4 - k * 0.1) * dim))
+		var cap := p - d * w * 1.3
+		_girder(img, tail, cap, w * 2.0, body)
+		for sd in [-1.0, 1.0]:
+			_poly(img, [tail + d * size * 0.3 + n * sd * w, tail - d * 0.5 + n * sd * (w + size * 0.16), tail + n * sd * w], STEEL[1] * dim if sd > 0 else STEEL[3] * dim)
+		_disc(img, cap, w + 0.9, STEEL[0])
+		_poly(img, [cap + n * (w + 0.9), p + d, cap - n * (w + 0.9)], STEEL[0])
+		_poly(img, [cap + n * w, p, cap - n * w], Color("d83a3a") * dim)
+		_poly(img, [cap + n * w, p, cap + n * w * 0.05], Color("ff8a7a") * dim)
+		return
 	var w := size * 0.15
 	var tail := p - d * size
+	for k in 3:
+		_disc(img, tail - d * (w * 0.9 + k * w * 1.5), w * (1.1 - k * 0.25), Color("ff8a2a", (0.4 - k * 0.1) * dim))
 	for sd in [-1.0, 1.0]:
-		_poly(img, [tail + d * size * 0.34 + n * sd * w, tail - d * 0.6 + n * sd * (w + size * 0.17), tail + n * sd * w + d * 0.4], STEEL[1] if sd > 0 else STEEL[3])
+		_poly(img, [tail + d * size * 0.34 + n * sd * w, tail - d * 0.6 + n * sd * (w + size * 0.17), tail + n * sd * w + d * 0.4], STEEL[1] * dim if sd > 0 else STEEL[3] * dim)
 	var cap := p - d * w * 3.4
-	_girder(img, tail, cap, w * 2.0, STEEL)
+	_girder(img, tail, cap, w * 2.0, body)
 	_line(img, tail.lerp(cap, 0.45) + n * w, tail.lerp(cap, 0.45) - n * w, 1.0, STEEL[0])
 	_poly(img, [cap + n * (w + 0.8), p + d * 1.0, cap - n * (w + 0.8)], STEEL[0])
-	_poly(img, [cap + n * w, p, cap - n * w], Color("d83a3a"))
-	_poly(img, [cap + n * w, p, cap + n * w * 0.05], Color("ff8a7a"))
-	for k in 3:
-		_disc(img, tail - d * (w * 0.9 + k * w * 1.5), w * (1.1 - k * 0.25), Color("ff8a2a", 0.4 - k * 0.1))
+	_poly(img, [cap + n * w, p, cap - n * w], Color("d83a3a") * dim)
+	_poly(img, [cap + n * w, p, cap + n * w * 0.05], Color("ff8a7a") * dim)
 	_disc(img, tail - d * w * 0.5, w * 0.8, Color("ffd890"))
 
-## Point-Defense Lattice: the cruiser's hub turret needles the missiles at `ps`
-## in turn (the real needle laser: a thin yellow polyline with a pale core).
-static func _pd_scene(img: Image, ps: Array, size: float) -> void:
-	var ms := _cr_turrets_at(img, Vector2(15, 46), 25.0, Vector2(30, 33), 1.4)
-	var d := Vector2(-0.7071, 0.7071)
-	var hits := []
-	for p in ps:
-		_pd_missile(img, p, size)
-		hits.append(p - d * size * 0.6 + d.orthogonal() * 1.9)
-	var pts := [ms[0]]
-	for h in hits:
-		pts.append(h)
+## A bold red X with a dark outline: this threat is neutralised.
+static func _pd_x(img: Image, c: Vector2, s: float) -> void:
+	for dd in [Vector2(1, 1), Vector2(1, -1)]:
+		_line(img, c - dd * s, c + dd * s, 4.6, Color("1a0508"))
+	for dd in [Vector2(1, 1), Vector2(1, -1)]:
+		_line(img, c - dd * s, c + dd * s, 2.7, Color("ff3434"))
+	for dd in [Vector2(1, 1), Vector2(1, -1)]:
+		_line(img, c - dd * s * 0.8 - Vector2(0.4, 0.4), c + dd * s * 0.8 - Vector2(0.4, 0.4), 0.8, Color("ffb0a0"))
+
+## A needle line through `pts`: soft glow, yellow body, pale core (the real PD needle's look).
+static func _pd_line(img: Image, pts: Array) -> void:
 	for k in pts.size() - 1:
-		_line(img, pts[k], pts[k + 1], 2.2, Color("ffe14a", 0.25))
+		_line(img, pts[k], pts[k + 1], 2.4, Color("ffe14a", 0.22))
 	for k in pts.size() - 1:
-		_line(img, pts[k], pts[k + 1], 1.2, Color("ffe14a"))
+		_line(img, pts[k], pts[k + 1], 1.1, Color("ffe14a"))
 	for k in pts.size() - 1:
-		_line(img, pts[k], pts[k + 1], 0.5, Color(1, 1, 0.85))
-	_soft_glow(img, ms[0], 3.0, Color("ffe060"), Color.WHITE)
-	var k := 0
-	for h in hits:
-		_cb_blast(img, h, 1.9 if k < 2 else 2.4, 400 + k)
-		k += 1
+		_line(img, pts[k], pts[k + 1], 0.45, Color(1, 1, 0.85))
+
+## Point-Defense Lattice: ordnance entries [nose, size, dim, torpedo?]; a needle
+## fan from the bottom edge to the first, then the chain through the rest, all X'd.
+static func _pd_net(img: Image, ords: Array) -> void:
+	var cs := []
+	for o in ords:
+		_pd_ord(img, o[0], o[1], o[2], o[3])
+		cs.append(o[0] + Vector2(0, -float(o[1]) * 0.5))
+	_pd_line(img, [Vector2(32, 61), cs[0]])
+	_pd_line(img, cs)
+	for k in ords.size():
+		_pd_x(img, cs[k], 3.0 + float(ords[k][1]) * 0.12)
