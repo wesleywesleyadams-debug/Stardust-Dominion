@@ -2800,6 +2800,13 @@ func _issue_command(world_pos: Vector2, attack_move: bool, queued: bool = false)
 	var slots := _formation(ships, world_pos)
 	for i in ships.size():
 		ships[i].do_or_queue(queued, "order_attack_move" if attack_move else "order_move", [slots[i]])
+	# The group travels together at its slowest member's speed (a ship
+	# fighting along the way is not held back; see Ship.group_speed).
+	var slowest := INF
+	for s in ships:
+		slowest = minf(slowest, s.base_speed())
+	for s in ships:
+		s.group_speed = slowest if ships.size() > 1 else 0.0
 	hud.ping(world_pos, Color("ff5a5a") if attack_move else Color.WHITE)
 
 ## Grid formation facing the direction of travel, biggest hulls in front.

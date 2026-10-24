@@ -689,6 +689,10 @@ var _scan_cd: float = 0.0
 ## max_speed() is asked several times a tick; compute it once per tick.
 var _speed_frame: int = -1
 var _speed_cache: float = 0.0
+## A player-ordered group move travels at its slowest member's speed (set by
+## Game._issue_command); 0 = no cap. Dropped once the ship is doing anything
+## but travelling, and ignored while it is engaging a target.
+var group_speed: float = 0.0
 ## Maneuvers (see _steer): ships thrust nose-first. Strafing Thrusters add
 ## sideways thrust, Reverse Thrusters backward thrust, each up to this share
 ## of full speed; parked ships keep station with a little thrust on every axis.
@@ -1101,11 +1105,21 @@ func refresh_stats() -> void:
 func max_speed() -> float:
 	var f := Engine.get_physics_frames()
 	if f == _speed_frame:
-		return _speed_cache * _evade_mult()
+		return _capped(_speed_cache * _evade_mult())
 	_speed_frame = f
 	var storm := IonStorm.SLOW if Game.instance.in_storm(global_position) else 1.0
 	_speed_cache = def["speed"] * Game.instance.mod(owner_id, "speed") * Game.instance.ship_speed_factor(owner_id) * storm
-	return _speed_cache * _evade_mult()
+	return _capped(_speed_cache * _evade_mult())
+
+func _capped(v: float) -> float:
+	if group_speed <= 0.0:
+		return v
+	if state != State.MOVE and state != State.ATTACK_MOVE:
+		group_speed = 0.0
+		return v
+	if state == State.ATTACK_MOVE and is_instance_valid(target):
+		return v
+	return minf(v, group_speed)
 
 ## Unmodified top speed (no Evasive burst / recovery).
 func base_speed() -> float:
