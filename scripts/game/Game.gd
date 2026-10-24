@@ -3212,7 +3212,7 @@ func _enter_dev_capture() -> void:
 					int(site.hp), int(site.max_hp), str(site.under_construction), int(resources[player_id]["minerals"])])
 				if not site.under_construction and not seen["built"]:
 					seen["built"] = true
-					print("SBBUILD finished, can_queue corvette='%s'" % site.can_queue("corvette")))
+					print("SBBUILD finished, armor=%d/%d shield=%d/%d can_queue corvette='%s'" % [int(site.armor), int(site.max_armor), int(site.shield), int(site.max_shield), site.can_queue("corvette")]))
 		if OS.get_environment("SL_BROKE") != "":
 			get_tree().create_timer(30.0).timeout.connect(func():
 				resources[player_id]["minerals"] = 900.0

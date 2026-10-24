@@ -166,6 +166,7 @@ func _construct(delta: float) -> void:
 	queue_redraw()
 	if construct_progress >= total:
 		under_construction = false
+		armor = max_armor
 		shield = max_shield
 		refresh_stats()
 		_update_site_look()
