@@ -1271,7 +1271,11 @@ func _add_fleet_tiles(sel: Array) -> void:
 	for e in ships.slice(0, FLEET_TILES_MAX):
 		var tile := FleetTile.new()
 		tile.host = e
-		tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# Click: just this ship. Ctrl+click: drop it from the group.
+		# Shift+click: every selected ship of its type.
+		tile.mouse_filter = Control.MOUSE_FILTER_STOP
+		tile.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		tile.gui_input.connect(_on_fleet_tile_input.bind(e))
 		# Every tile is the same box whatever the hull, so the bars are all
 		# the same length and can be compared down the row at a glance.
 		tile.custom_minimum_size = FLEET_TILE
@@ -1294,6 +1298,22 @@ func _add_fleet_tiles(sel: Array) -> void:
 	_sel_body.add_child(row)
 	if ships.size() > FLEET_TILES_MAX:
 		_sel_body.add_child(_label("+%d more" % (ships.size() - FLEET_TILES_MAX), DIM, 13))
+
+func _on_fleet_tile_input(ev: InputEvent, ship: Ship) -> void:
+	if not (ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed):
+		return
+	get_viewport().set_input_as_handled()
+	if not is_instance_valid(ship):
+		return
+	var sel: Array = game.selection.filter(func(x): return is_instance_valid(x))
+	var pick: Array
+	if ev.ctrl_pressed:
+		pick = sel.filter(func(x): return x != ship)
+	elif ev.shift_pressed:
+		pick = sel.filter(func(x): return x is Ship and x.ship_type == ship.ship_type)
+	else:
+		pick = [ship]
+	game._set_selection(pick, false)
 
 ## A ship's condition as one number (0-1), worst layer first: hull decides,
 ## with armor and shields breaking ties.
