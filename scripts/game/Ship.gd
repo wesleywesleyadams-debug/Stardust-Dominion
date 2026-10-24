@@ -2043,6 +2043,21 @@ func _separation() -> Vector2:
 ## Share of its wanted speed a hull keeps flying forward while it turns (full speed: turning never slows it).
 const TURN_THRUST := 1.0
 
+## Whether to pivot on the spot rather than carve the turn at speed: in a
+## fight (any state but plain travel), when the heading wanted is mostly
+## behind, or when the destination is too close for the arc this hull would
+## swing at full speed (its turning radius, speed / turn rate) to reach it.
+func _turn_in_place(want: Vector2) -> bool:
+	if not (state == State.MOVE or (state == State.ATTACK_MOVE and not is_instance_valid(target))):
+		return true
+	var off: float = absf(angle_difference(rotation, want.angle()))
+	if off > deg_to_rad(110.0):
+		return true
+	if off < deg_to_rad(30.0):
+		return false
+	var turn_r: float = want.length() / maxf(turn_rate(), 0.01)
+	return global_position.distance_to(_nav_goal) < turn_r * 2.0 * sin(off)
+
 ## Radians a second this hull turns: bigger hulls turn slower.
 func turn_rate() -> float:
 	return clampf(6.0 * 8.0 / radius, 1.2, 6.0) * Game.instance.ship_speed_factor(owner_id) * Game.instance.mod(owner_id, "turn_rate")
@@ -2125,8 +2140,9 @@ func _steer(desired: Vector2, delta: float, face: Node2D) -> void:
 	var r := fwd.orthogonal()
 	var bt2 := _body_thrust(rotation, want, lat, rev)
 	# Coming about to travel: the engines keep pushing along the nose at
-	# TURN_THRUST of the wanted speed instead of stalling while it turns.
-	if travel_turn:
+	# TURN_THRUST of the wanted speed instead of stalling while it turns -
+	# unless turning in place is the better way round (see _turn_in_place).
+	if travel_turn and not _turn_in_place(want):
 		bt2.x = maxf(bt2.x, want.length() * TURN_THRUST)
 	var vf := move_toward(velocity.dot(fwd), bt2.x, accel * delta)
 	var vl := move_toward(velocity.dot(r), bt2.y, accel * delta)
